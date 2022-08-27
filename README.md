@@ -1,2 +1,2 @@
 # sbg
-s Browser Gui c library.
+s Browser GUI c library.

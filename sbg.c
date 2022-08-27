@@ -11,6 +11,7 @@
 //  Date         Author        Description of Change
 // ------       --------      -----------------------
 // 2022-08-26   Sky Hoffert   Initial release.
+// 2022-08-27   Sky Hoffert   Fixed issue with HTTP setup messages, now websockets are working.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -46,7 +47,7 @@ static const unsigned char base64_table[65] =
  * nul terminated to make it easier to use as a C string. The nul terminator is
  * not included in out_len.
  */
-unsigned char * base64_encode(const unsigned char *src, size_t len,
+unsigned char* _base64_encode(const unsigned char *src, size_t len,
 			      size_t *out_len)
 {
 	unsigned char *out, *pos;
@@ -103,10 +104,37 @@ unsigned char * base64_encode(const unsigned char *src, size_t len,
 	return out;
 }
 
+void _sbg_ping(int fd)
+{
+    char buf[3];
+
+    buf[0] = 0x89; // 0b1000 1001, final fragment, opcode 9 (ping)
+    buf[1] = 0x01; // 0b0000 0000, MASK false, len 1 byte
+    buf[2] = 0x55; // payload data
+
+    write(fd, buf, 3);
+}
+
+void _sbg_sendclose(int fd)
+{
+    printf("Closing websocket.\n");
+
+    char buf[4];
+
+    buf[0] = 0x88;
+    buf[1] = 0x02;
+
+    // close code, 1000 (normal closure).
+    buf[2] = 0x03;
+    buf[3] = 0xe8;
+
+    write(fd, buf, 4);
+}
+
 void _sbg_send(int fd, const char* data)
 {
-    char buf[1024];
-    memset(buf, 0, 1024);
+    char buf[SBG_SZ];
+    memset(buf, 0, SBG_SZ);
 
     int len = strlen(data);
 
@@ -117,49 +145,30 @@ void _sbg_send(int fd, const char* data)
     }
 
     buf[0] = 0x81; // 0b1000 0001, final fragment, opcode 1 (text)
-    buf[1] = 0x00 + len; // 0b1000 0001, MASK true, len 1 byte
+    buf[1] = 0x00 + (0x7f & len); // 0b0lll llll, MASK false, len l byte(s)
 
-    /*
-    unsigned int mask = rand();
-
-    unsigned char maskc[4];
-
-    maskc[0] = (mask >> 24) & 0x0ff;
-    maskc[1] = (mask >> 16) & 0x0ff;
-    maskc[2] = (mask >> 8 ) & 0x0ff;
-    maskc[3] = (mask >> 0 ) & 0x0ff;
-
-    buf[2] = maskc[0]; // MASK OCT 0
-    buf[3] = maskc[1]; // MASK OCT 1
-    buf[4] = maskc[2]; // MASK OCT 2
-    buf[5] = maskc[3]; // MASK OCT 3
-
-    for (int i = 0; i < len; i++)
-    {
-        buf[6+i] = data[i] ^ maskc[i % 4]; // payload data (masked)
-    }
-    */
     for (int i = 0; i < len; i++)
     {
         buf[2+i] = data[i];
     }
 
-    printf("Sending:\n    ");
-    for (int i = 0; i < strlen(buf); i++)
-    {
-        printf("0x%x ", (unsigned char) buf[i]);
-    }
-    printf("\n");
+    // printf("Sending (%d):\n    ", 2+len);
+    // for (int i = 0; i < strlen(buf); i++)
+    // {
+    //     printf("0x%02x ", (unsigned char) buf[i]);
+    // }
+    // printf("\n");
 
-    write(fd, buf, strlen(buf));
+    write(fd, buf, 2+len);
 }
 
-void _sbg_parse(const char* data)
+void _sbg_parse(const char* data, char* buf)
 {
     int slen = strlen(data);
-    int len = data[1] & 0x7f;
+    // int len = data[1] & 0x7f;
+    memset(buf, 0, SBG_SZ);
 
-    printf("data length: %d\n", len);
+    // printf("data length: %d\n", len);
 
     char mask[4];
     mask[0] = data[2];
@@ -167,12 +176,30 @@ void _sbg_parse(const char* data)
     mask[2] = data[4];
     mask[3] = data[5];
 
-    printf("Message: ");
+    // printf("Message: ");
     for (int i = 0; i < slen-6; i++)
     {
-        printf("%c", data[6+i] ^ mask[i % 4]);
+        buf[i] = data[6+i] ^ mask[i % 4];
+        // printf("%c", buf[i]);
     }
-    printf("\n");
+    // printf("\n");
+}
+
+void _sbg_handle(sbg* s, const char* m)
+{
+    if (strncmp(m, "sz", 2) == 0)
+    {
+        s->width = strtol(m+3, NULL, 10);
+
+        char* p = strstr(m+3, " ");
+        s->height = strtol(p+1, NULL, 10);
+
+        printf("got new size (%d,%d)\n", s->width, s->height);
+    }
+    else
+    {
+        printf("couldn't handle it.\n");
+    }
 }
 
 int _verify_ws(const char* m)
@@ -226,12 +253,12 @@ void* _sbg_thread(void* vargp)
     struct sockaddr_in client;
     socklen_t len = sizeof(struct sockaddr_in);
 
-    char buf[1024];
+    char buf[SBG_SZ];
+    char parsed[SBG_SZ];
 
-    int ws_verified = 0;
     int keyidx = -1;
 
-    int counter = 0;
+    int dbg_counter = 0;
 
     while (s->_quit_flag == 0)
     {
@@ -249,8 +276,8 @@ void* _sbg_thread(void* vargp)
         }
         else if (retval == 0)
         {
-            printf(".");
-            fflush(stdout);
+            // printf(".");
+            // fflush(stdout);
         }
         else
         {
@@ -267,10 +294,10 @@ void* _sbg_thread(void* vargp)
         {
             while (s->_quit_flag == 0)
             {
+                usleep(1000);
+
                 tv.tv_sec = 0;
                 tv.tv_usec = 100000;
-
-                counter += ws_verified;
 
                 FD_ZERO(&fds);
                 FD_SET(s->_sockfd, &fds);
@@ -283,27 +310,32 @@ void* _sbg_thread(void* vargp)
                 }
                 else if (retval == 0)
                 {
-                    printf("_");
-                    fflush(stdout);
+                    // printf("_");
+                    // fflush(stdout);
+                    dbg_counter++;
                 }
                 else
                 {
-                    memset(buf, 0, 1024);
-                    retval = read(s->_sockfd, buf, 1024);
+                    memset(buf, 0, SBG_SZ);
+                    retval = read(s->_sockfd, buf, SBG_SZ);
 
                     if (retval == 0)
                     {
                         close(s->_sockfd);
                         s->_sockfd = -1;
+                        s->_verified = 0;
+                        break;
                     }
 
-                    printf("got msg(%d):\n", retval);
+                    // printf("got msg(%d):\n", retval);
 
-                    printf("%s", buf);
-
-                    if (ws_verified == 1)
+                    if (s->_verified == 1)
                     {
-                        _sbg_parse(buf);
+                        _sbg_parse(buf, parsed);
+
+                        _sbg_handle(s, parsed);
+
+                        printf("got msg: %s\n", parsed);
 
                         continue;
                     }
@@ -313,7 +345,7 @@ void* _sbg_thread(void* vargp)
                     {
                         keyidx = retval;
 
-                        ws_verified = 1;
+                        s->_verified = 1;
 
                         char key[32];
                         char fullkey[128];
@@ -327,41 +359,81 @@ void* _sbg_thread(void* vargp)
                         printf("got key: %s\n", key);
 
                         char hash[128];
+                        memset(hash, 0, 128);
                         SHA1((unsigned char*) fullkey, (ssize_t) strlen(fullkey), (unsigned char*) hash);
 
                         char* encoded;
                         size_t outlen;
-                        encoded = (char*)base64_encode((unsigned char*) hash, strlen(hash), &outlen);
+                        encoded = (char*)_base64_encode((unsigned char*) hash, strlen(hash), &outlen);
 
-                        sprintf(buf, "%s%s\r\n\r\n", WS_RESPONSE_MSG, encoded);
+                        // AHA!!! There was an extra newline character here.
+                        // Solution is to overwrite it with the first \r for the end of an HTTP
+                        // packet, and finish in the sprintf below.
+                        encoded[outlen-1] = '\r';
+
+                        sprintf(buf, "%s%s\n\r\n", WS_RESPONSE_MSG, encoded);
 
                         free(encoded);
-
-                        printf("sending: %s\n", buf);
 
                         write(s->_sockfd, buf, strlen(buf));
                     }
                 }
 
-                // After connected for 2 seconds, send data.
-                if (counter >= 20)
-                {
-                    counter = 0;
-                    continue;
-
-                    _sbg_send(s->_sockfd, "TEST");
-                }
-
+                // When this thread detects a new message has been written, send it.
                 if (strlen(s->msg) > 0)
                 {
-                    _sbg_send(s->_sockfd, s->msg);
-                    memset(s->msg, 0, 1024);
+                    pthread_mutex_lock(&s->msg_mtx);
+
+                    if (strcmp(s->msg, "ping") == 0)
+                    {
+                        _sbg_ping(s->_sockfd);
+                    }
+                    else
+                    {
+                        _sbg_send(s->_sockfd, s->msg);
+                    }
+
+                    memset(s->msg, 0, SBG_SZ);
+
+                    pthread_mutex_unlock(&s->msg_mtx);
+                }
+                else
+                {
+                    if (dbg_counter > 10)
+                    {
+                        dbg_counter = 0;
+
+                        if (s->_verified == 1 && s->width == 0)
+                        {
+                            _sbg_send(s->_sockfd, "gsz");
+                        }
+                    }
                 }
             }
         }
     }
 
+    if (s->_verified == 1)
+    {
+        _sbg_sendclose(s->_sockfd);
+    }
+
     return NULL;
+}
+
+int sbg_send(sbg* s, const char* msg)
+{
+    if (s->_verified == 0)
+    {
+        printf("s not yet verified.\n");
+        return 100;
+    }
+
+    pthread_mutex_lock(&s->msg_mtx);
+    strcpy(s->msg, msg);
+    pthread_mutex_unlock(&s->msg_mtx);
+
+    return 0;
 }
 
 int sbg_init(sbg* s)
@@ -374,7 +446,11 @@ int sbg_init(sbg* s)
     s->_sockfd = -1;
     s->_servfd = socket(AF_INET, SOCK_STREAM, 0);
 
-    memset(s->msg, 0, 1024);
+    s->_verified = 0;
+
+    pthread_mutex_unlock(&s->msg_mtx);
+
+    memset(s->msg, 0, SBG_SZ);
 
     if (s->_servfd == -1)
     {
@@ -435,7 +511,13 @@ int sbg_term(sbg* s)
     return SBG_OK;
 }
 
-void sbg_draw_line(const sbg* s, const sbg_pt* a, const sbg_pt* b)
+void sbg_draw_line(sbg* s, const sbg_line* l)
 {
+    char buf[SBG_SZ];
+    memset(buf, 0, SBG_SZ);
 
+    sprintf(buf, "dl %d %d %0.3f %0.3f %0.3f %0.3f", l->width, l->color,
+            l->a.x, l->a.y, l->b.x, l->b.y);
+
+    sbg_send(s, buf);
 }

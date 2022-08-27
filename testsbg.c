@@ -32,13 +32,6 @@ int main(int argc, char* argv[])
         printf("ERR. Couldn't init sbg variable. Exiting.\n");
         return 100;
     }
-
-    sbg_pt a, b;
-    a.x = 0;
-    a.y = 0;
-    b.x = 100;
-    b.y = 100;
-    sbg_draw_line(&s, &a, &b);
     
     char c = getc(stdin);
 
@@ -46,7 +39,22 @@ int main(int argc, char* argv[])
     {
         if (c == 'd')
         {
-            sprintf(s.msg, "TE\r\n");
+            sbg_send(&s, "this is a test message");
+        }
+        else if (c == 'p')
+        {
+            sbg_send(&s, "ping");
+        }
+        else if (c == 'l')
+        {
+            sbg_line line;
+            line.a.x = 0;
+            line.a.y = 0;
+            line.b.x = 100;
+            line.b.y = 100;
+            line.color = 0xff0000;
+            line.width = 3;
+            sbg_draw_line(&s, &line);
         }
 
         c = getc(stdin);

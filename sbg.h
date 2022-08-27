@@ -11,6 +11,7 @@
 //  Date         Author        Description of Change
 // ------       --------      -----------------------
 // 2022-08-26   Sky Hoffert   Initial release.
+// 2022-08-27   Sky Hoffert   Updated API for working websocket/sbg, implemented drawline.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -24,6 +25,8 @@
 
 #define SBG_PORT 8001
 
+#define SBG_SZ 1024
+
 typedef struct sbg {
     int width;
     int height;
@@ -33,14 +36,23 @@ typedef struct sbg {
 
     int _servfd;
     int _sockfd;
+    int _verified;
 
-    char msg[1024];
+    char msg[SBG_SZ];
+    pthread_mutex_t msg_mtx;
 } sbg;
 
 typedef struct sbg_pt {
     float x;
     float y;
 } sbg_pt;
+
+typedef struct sbg_line {
+    sbg_pt a;
+    sbg_pt b;
+    int color;
+    int width;
+} sbg_line;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Function:    sbg_init
@@ -58,7 +70,12 @@ int sbg_init(sbg* s);
 //
 int sbg_term(sbg* s);
 
-void sbg_send(const char* msg);
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Function:    sbg_send
+// Description: Send a given msg.
+// @return int: 0 for success, error code otherwise.
+//
+int sbg_send(sbg* s, const char* msg);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Function:    sbg_draw_line
@@ -67,6 +84,6 @@ void sbg_send(const char* msg);
 // @param a: point a of line.
 // @param b: point b of line.
 //
-void sbg_draw_line(const sbg* s, const sbg_pt* a, const sbg_pt* b);
+void sbg_draw_line(sbg* s, const sbg_line* l);
 
 #endif
