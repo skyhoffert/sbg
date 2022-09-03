@@ -11,6 +11,7 @@
 //  Date         Author        Description of Change
 // ------       --------      -----------------------
 // 2022-08-26   Sky Hoffert   Initial release.
+// 2022-09-02   Sky Hoffert   Updated chars to add bg color and circle.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -39,11 +40,15 @@ int main(int argc, char* argv[])
     {
         if (c == 'd')
         {
-            sbg_send(&s, "this is a test message");
+            // sbg_send(&s, "this is a test message");
         }
         else if (c == 'p')
         {
-            sbg_send(&s, "ping");
+            // sbg_send(&s, "ping");
+        }
+        else if (c == 'b')
+        {
+            sbg_set_bg_color(&s, 0x000088);
         }
         else if (c == 'l')
         {
@@ -55,6 +60,28 @@ int main(int argc, char* argv[])
             line.color = 0xff0000;
             line.width = 3;
             sbg_draw_line(&s, &line);
+        }
+        else if (c == 'c')
+        {
+            sbg_circle circ;
+            circ.c.x = 300;
+            circ.c.y = 300;
+            circ.radius = 2;
+            circ.fill_color = 0x00ff00;
+            circ.line_width = 10;
+            circ.line_color = 0x228822;
+            sbg_draw_circle(&s, &circ);
+        }
+        else if (c == '\n')
+        {
+        }
+        else
+        {
+            printf("Unknown command. See:\n");
+            printf("  b: background color\n");
+            printf("  l: test line\n");
+            printf("  c: test circle\n");
+            printf("\n");
         }
 
         c = getc(stdin);

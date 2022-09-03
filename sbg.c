@@ -12,6 +12,7 @@
 // ------       --------      -----------------------
 // 2022-08-26   Sky Hoffert   Initial release.
 // 2022-08-27   Sky Hoffert   Fixed issue with HTTP setup messages, now websockets are working.
+// 2022-09-02   Sky Hoffert   Added set background color and draw circle implementations.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -421,21 +422,6 @@ void* _sbg_thread(void* vargp)
     return NULL;
 }
 
-int sbg_send(sbg* s, const char* msg)
-{
-    if (s->_verified == 0)
-    {
-        printf("s not yet verified.\n");
-        return 100;
-    }
-
-    pthread_mutex_lock(&s->msg_mtx);
-    strcpy(s->msg, msg);
-    pthread_mutex_unlock(&s->msg_mtx);
-
-    return 0;
-}
-
 int sbg_init(sbg* s)
 {
     s->width = 0;
@@ -511,13 +497,58 @@ int sbg_term(sbg* s)
     return SBG_OK;
 }
 
-void sbg_draw_line(sbg* s, const sbg_line* l)
+void sbg_set_bg_color(sbg* s, int color)
 {
+    if (s->_verified == 0)
+    {
+        printf("s not yet verified.\n");
+        return;
+    }
+
     char buf[SBG_SZ];
     memset(buf, 0, SBG_SZ);
 
-    sprintf(buf, "dl %d %d %0.3f %0.3f %0.3f %0.3f", l->width, l->color,
+    sprintf(buf, "sbgcol %d", color);
+
+    pthread_mutex_lock(&s->msg_mtx);
+    strcpy(s->msg, buf);
+    pthread_mutex_unlock(&s->msg_mtx);
+}
+
+void sbg_draw_line(sbg* s, const sbg_line* l)
+{
+    if (s->_verified == 0)
+    {
+        printf("s not yet verified.\n");
+        return;
+    }
+
+    char buf[SBG_SZ];
+    memset(buf, 0, SBG_SZ);
+
+    sprintf(buf, "dl %0.3f %d %0.3f %0.3f %0.3f %0.3f", l->width, l->color,
             l->a.x, l->a.y, l->b.x, l->b.y);
 
-    sbg_send(s, buf);
+    pthread_mutex_lock(&s->msg_mtx);
+    strcpy(s->msg, buf);
+    pthread_mutex_unlock(&s->msg_mtx);
+}
+
+void sbg_draw_circle(sbg* s, const sbg_circle* c)
+{
+    if (s->_verified == 0)
+    {
+        printf("s not yet verified.\n");
+        return;
+    }
+
+    char buf[SBG_SZ];
+    memset(buf, 0, SBG_SZ);
+
+    sprintf(buf, "dc %0.3f %0.3f %0.3f %d %0.3f %d", c->c.x, c->c.y, c->radius, c->fill_color,
+        c->line_width, c->line_color);
+
+    pthread_mutex_lock(&s->msg_mtx);
+    strcpy(s->msg, buf);
+    pthread_mutex_unlock(&s->msg_mtx);
 }

@@ -12,6 +12,7 @@
 // ------       --------      -----------------------
 // 2022-08-26   Sky Hoffert   Initial release.
 // 2022-08-27   Sky Hoffert   Updated API for working websocket/sbg, implemented drawline.
+// 2022-09-02   Sky Hoffert   Added set background color and draw circle.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -51,8 +52,16 @@ typedef struct sbg_line {
     sbg_pt a;
     sbg_pt b;
     int color;
-    int width;
+    float width;
 } sbg_line;
+
+typedef struct sbg_circle {
+    sbg_pt c;
+    float radius;
+    int fill_color;
+    int line_color;
+    float line_width;
+} sbg_circle;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Function:    sbg_init
@@ -71,19 +80,21 @@ int sbg_init(sbg* s);
 int sbg_term(sbg* s);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Function:    sbg_send
-// Description: Send a given msg.
-// @return int: 0 for success, error code otherwise.
+// Function:    sbg_set_bg_color
+// Description: Set the background color to a given value.
 //
-int sbg_send(sbg* s, const char* msg);
+void sbg_set_bg_color(sbg* s, int color);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Function:    sbg_draw_line
-// Description: Draw a line between two points.
-// @param s: sbg struct.
-// @param a: point a of line.
-// @param b: point b of line.
+// Description: Draw a given line.
 //
 void sbg_draw_line(sbg* s, const sbg_line* l);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Function:    sbg_draw_circle
+// Description: Draw a circle based on given sbg_circle struct.
+//
+void sbg_draw_circle(sbg* s, const sbg_circle* c);
 
 #endif
