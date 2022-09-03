@@ -1,5 +1,8 @@
 
-let ws = new WebSocket("ws://localhost:8001");
+const IP   = "10.0.0.19";
+const PORT = "8001";
+
+let ws = new WebSocket("ws://" + IP + ":" + PORT);
 
 ws.onopen = function(e)
 {
@@ -53,10 +56,10 @@ const PI = 3.1415926;
 
 const canvas = document.getElementById("canvas");
 const app = new PIXI.Application({
-width: WIDTH, height: HEIGHT,
-backgroundColor: BG_COLOR,
-resolution: window.devicePixelRatio || 1,
-view: canvas,
+    width: WIDTH, height: HEIGHT,
+    backgroundColor: BG_COLOR,
+    resolution: window.devicePixelRatio || 1,
+    view: canvas,
 });
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST; 
@@ -173,6 +176,29 @@ function sbg_parse(s)
         graphics.lineStyle(w, c);
         graphics.moveTo(ax, ay);
         graphics.lineTo(bx, by);
+    }
+    else if (toks[0] == "sbgcol")
+    {
+        console.log("wants to set bg color");
+
+        let c = parseInt(toks[1]);
+
+        app.renderer.backgroundColor = c;
+    }
+    else if (toks[0] == "dc")
+    {
+        console.log("wants to draw a circle");
+
+        let cx = parseFloat(toks[1]);
+        let cy = parseFloat(toks[2]);
+        let rd = parseFloat(toks[3]);
+        let fc = parseInt(toks[4]);
+        let lw = parseFloat(toks[5]);
+        let lc = parseInt(toks[6]);
+
+        graphics.lineStyle(lw, lc);
+        graphics.beginFill(fc);
+        graphics.drawCircle(cx, cy, rd);
     }
     else if (toks[0] == "gsz")
     {
